@@ -1,0 +1,68 @@
+name: Build CS2 ICS
+# CS2 Major 赛事 - 每小时检查一次
+
+on:
+  schedule:
+    # 每小时执行一次
+    - cron: "0 * * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/cs2_fetcher.py"
+      - "src/ics_generator.py"
+      - "main.py"
+      - "requirements.txt"
+      - ".github/workflows/cs2.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt --break-system-packages
+
+      - name: Build CS2 ICS
+        run: python main.py cs2
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          if git diff --quiet output/cs2.ics; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes detected."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected, will commit."
+          fi
+
+      - name: Commit and push
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/cs2.ics
+          git commit -m "🔄 Update cs2.ics [auto]"
+          git push
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output
+          publish_branch: gh-pages
+          force_orphan: false
+          keep_files: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "🔄 Update ICS files [auto]"
