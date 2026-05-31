@@ -1,0 +1,73 @@
+name: Build All ICS (Aggregated)
+# 聚合日历 - 在任何单个日历更新后自动重新聚合
+# 同时提供手动触发完整构建的入口
+
+on:
+  workflow_run:
+    workflows:
+      - "Build Holidays ICS"
+      - "Build World Cup ICS"
+      - "Build CS2 ICS"
+    types:
+      - completed
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/ics_generator.py"
+      - "main.py"
+      - ".github/workflows/build-all.yml"
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt --break-system-packages
+
+      - name: Build All ICS
+        run: python main.py all
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          if git diff --quiet output/; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes detected."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected, will commit."
+          fi
+
+      - name: Commit and push
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/*.ics
+          git commit -m "🔄 Update all ICS files [auto]"
+          git push
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output
+          publish_branch: gh-pages
+          force_orphan: false
+          keep_files: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "🔄 Update all ICS files [auto]"
